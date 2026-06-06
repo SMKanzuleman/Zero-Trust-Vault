@@ -1,0 +1,19 @@
+# Zero-Trust Vault — Git Ignore Rules
+# ──────────────────────────────────────
+
+# Environment secrets — NEVER commit these
+.env
+
+# Node dependencies
+node_modules/
+
+# Uploaded and encrypted file storage (runtime data)
+uploads/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor artifacts
+.vscode/
+*.swp

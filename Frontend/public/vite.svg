@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="lockGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shield body -->
+  <path
+    d="M50 8 L85 22 L85 52 C85 70 68 84 50 92 C32 84 15 70 15 52 L15 22 Z"
+    fill="url(#shieldGrad)"
+    opacity="0.18"
+    stroke="url(#shieldGrad)"
+    stroke-width="2.5"
+    stroke-linejoin="round"
+  />
+  <!-- Shield inner highlight -->
+  <path
+    d="M50 14 L80 26 L80 51 C80 67 65 80 50 87 C35 80 20 67 20 51 L20 26 Z"
+    fill="url(#shieldGrad)"
+    opacity="0.08"
+  />
+
+  <!-- Padlock body (rectangle with rounded corners) -->
+  <rect x="33" y="47" width="34" height="26" rx="5" fill="url(#lockGrad)" opacity="0.95"/>
+
+  <!-- Padlock shackle (U arc) -->
+  <path
+    d="M39 47 L39 39 A11 11 0 0 1 61 39 L61 47"
+    stroke="url(#shieldGrad)"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    fill="none"
+    opacity="0.85"
+  />
+
+  <!-- Keyhole -->
+  <circle cx="50" cy="58" r="4.5" fill="white" opacity="0.9"/>
+  <rect x="47.5" y="58" width="5" height="7" rx="2" fill="white" opacity="0.9"/>
+</svg>
