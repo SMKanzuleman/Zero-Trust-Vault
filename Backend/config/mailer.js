@@ -1,12 +1,6 @@
 const nodemailer = require('nodemailer');
 
-/**
- * Sends a 6-digit verification code to the user's email.
- * If SMTP credentials are not configured, it prints the code to the server console.
- *
- * @param {string} email - Recipient's email address.
- * @param {string} code - The 6-digit verification code.
- */
+
 const sendVerificationEmail = async (email, code) => {
   const host = process.env.SMTP_HOST;
   const port = process.env.SMTP_PORT;

@@ -1,4 +1,3 @@
-
 const crypto = require('crypto');
 const { execSync, spawn } = require('child_process');
 const path = require('path');

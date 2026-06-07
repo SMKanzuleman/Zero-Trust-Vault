@@ -20,6 +20,9 @@ const SecureFile = require('../models/SecureFile');
 const BackupFile = require('../models/BackupFile');
 const { sendVerificationEmail } = require('../config/mailer');
 
+
+
+
 // ─── EMAIL VERIFICATION MIDDLEWARE ──────────────────────────────────────────
 const requireEmailVerified = async (req, res, next) => {
   try {
