@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
 import VerifyEmail from './pages/VerifyEmail';
+import AdminDashboard from './pages/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Toaster } from 'react-hot-toast';
 
@@ -33,13 +34,34 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/password" element={<ChangePassword />} />
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['user']}>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute allowedRoles={['user', 'admin']}>
+              <Profile />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/password" 
+          element={
+            <ProtectedRoute allowedRoles={['user', 'admin']}>
+              <ChangePassword />
+            </ProtectedRoute>
+          } 
+        />
         <Route 
           path="/verify-email" 
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['user']}>
               <VerifyEmail />
             </ProtectedRoute>
           } 
@@ -47,8 +69,16 @@ function App() {
         <Route 
           path="/vault" 
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['user']}>
               <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin" 
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminDashboard />
             </ProtectedRoute>
           } 
         />

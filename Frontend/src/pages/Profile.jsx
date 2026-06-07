@@ -5,7 +5,7 @@ import { User, ArrowLeft, Loader2, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Profile = () => {
-  const [username, setUsername] = useState('');
+  const [name, setName] = useState('');
   const [profilePicture, setProfilePicture] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -13,6 +13,13 @@ const Profile = () => {
   const navigate = useNavigate();
 
   const token = localStorage.getItem('token');
+  let userRole = 'user';
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      userRole = payload.role || 'user';
+    } catch (e) {}
+  }
 
   useEffect(() => {
     if (!token) {
@@ -25,7 +32,7 @@ const Profile = () => {
         const res = await axios.get('http://localhost:5000/api/auth/profile', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setUsername(res.data.user.username);
+        setName(res.data.user.name);
         setProfilePicture(res.data.user.profilePicture || '');
       } catch (err) {
         toast.error('Failed to load profile data.');
@@ -67,7 +74,7 @@ const Profile = () => {
 
     try {
       const res = await axios.put('http://localhost:5000/api/auth/profile', 
-        { username, profilePicture },
+        { name, profilePicture },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
@@ -86,16 +93,16 @@ const Profile = () => {
   return (
     <div className="min-h-screen p-8 flex items-center justify-center relative">
       <Link 
-        to="/dashboard" 
+        to={userRole === 'admin' ? "/admin" : "/vault"} 
         className="absolute top-8 left-8 flex items-center gap-2 text-sm font-semibold text-muted hover:text-text transition-colors"
       >
-        <ArrowLeft size={16} /> Back to Vault
+        <ArrowLeft size={16} /> {userRole === 'admin' ? 'Back to Control Panel' : 'Back to Vault'}
       </Link>
 
       <div className="w-full max-w-[400px]">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold tracking-tight mb-2">Edit Profile</h1>
-          <p className="text-muted">Update your username and profile picture.</p>
+          <p className="text-muted">Update your name and profile picture.</p>
         </div>
 
         {loading ? (
@@ -111,7 +118,7 @@ const Profile = () => {
                   {profilePicture ? (
                     <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
-                    username?.charAt(0).toUpperCase() || 'U'
+                    name?.charAt(0).toUpperCase() || 'U'
                   )}
                 </div>
                 <div 
@@ -154,7 +161,7 @@ const Profile = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">Username</label>
+              <label className="block text-sm font-semibold text-text mb-1.5">Full Name</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted">
                   <User size={18} />
@@ -162,12 +169,16 @@ const Profile = () => {
                 <input 
                   type="text" 
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-[6px] text-text focus:outline-none focus:border-text transition-colors shadow-sm"
-                  placeholder="Your username"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={userRole === 'admin'}
+                  className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-[6px] text-text focus:outline-none focus:border-text transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  placeholder="Your full name"
                 />
               </div>
+              {userRole === 'admin' && (
+                <p className="text-xs text-amber-600 mt-1.5 font-medium">Administrator names cannot be changed.</p>
+              )}
             </div>
 
             <button 

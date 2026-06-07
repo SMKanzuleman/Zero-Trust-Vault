@@ -141,6 +141,7 @@ const Dashboard = () => {
         setFiles(prev => [{
           _id: res.data.file.id || res.data.file._id,
           fileName: res.data.file.fileName,
+          fileSize: res.data.file.fileSize || file.size,
           uploadedAt: res.data.file.uploadedAt,
           uploadedBy: profile || user
         }, ...prev]);
@@ -343,10 +344,10 @@ const Dashboard = () => {
               {profile?.profilePicture ? (
                 <img src={profile.profilePicture} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                (profile?.username || user?.username)?.charAt(0).toUpperCase() || 'U'
+                (profile?.name || user?.name)?.charAt(0).toUpperCase() || 'U'
               )}
             </div>
-            <span className="font-semibold text-sm text-text">{profile?.username || user?.username || 'User'}</span>
+            <span className="font-semibold text-sm text-text">{profile?.name || user?.name || 'User'}</span>
           </div>
           
           <div className={`absolute left-full top-0 ml-3 w-52 bg-surface border border-border rounded-md shadow-lg transition-all duration-200 z-50 overflow-hidden ${isDropdownOpen ? 'opacity-100 visible translate-x-0' : 'opacity-0 invisible -translate-x-2'}`}>
@@ -494,7 +495,7 @@ const Dashboard = () => {
                       {file.fileName}
                     </h3>
                     <p className={`text-xs truncate mt-0.5 ${file.isCorrupted ? 'text-red-400/70' : 'text-muted'}`}>
-                      {file.isCorrupted ? 'File is corrupted' : `Uploaded by ${file.uploadedBy?.username || 'You'}`}
+                      {file.isCorrupted ? 'File is corrupted' : `Uploaded by ${file.uploadedBy?.name || 'You'}`}
                     </p>
                   </div>
                 </div>
@@ -559,6 +560,7 @@ const VerificationModal = ({ onClose, onVerifySuccess, token, email }) => {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [codeSent, setCodeSent] = useState(false);
 
   useEffect(() => {
     if (cooldown === 0) return;
@@ -592,6 +594,24 @@ const VerificationModal = ({ onClose, onVerifySuccess, token, email }) => {
     }
   };
 
+  const handleSendCode = async () => {
+    setLoading(true);
+    try {
+      await axios.post(
+        'http://localhost:5000/api/auth/send-verification',
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Verification code sent successfully!');
+      setCodeSent(true);
+      setCooldown(30);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleResend = async () => {
     if (cooldown > 0) return;
     
@@ -616,48 +636,78 @@ const VerificationModal = ({ onClose, onVerifySuccess, token, email }) => {
       <div className="bg-surface border border-border w-full max-w-[400px] rounded-[10px] p-6 shadow-2xl animate-[scaleUp_0.2s_ease-out]">
         <div className="text-center mb-6">
           <h3 className="text-xl font-bold mb-1">Verification Required</h3>
-          <p className="text-sm text-muted">
-            To unlock file actions, please confirm the code sent to:
-            <br />
-            <span className="font-semibold text-text">{email || 'your email'}</span>
+          <p className="text-sm text-muted text-center leading-relaxed">
+            {!codeSent ? (
+              <>
+                Click the button below to send a verification code to:
+                <br />
+                <span className="font-semibold text-text">{email || 'your email'}</span>
+              </>
+            ) : (
+              <>
+                To unlock file actions, please confirm the code sent to:
+                <br />
+                <span className="font-semibold text-text">{email || 'your email'}</span>
+              </>
+            )}
           </p>
         </div>
         
-        <form onSubmit={handleVerify} className="flex flex-col gap-4">
-          <input
-            type="text"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            className="w-full border border-border rounded-[6px] py-2.5 text-center font-mono text-xl tracking-[0.5em] font-semibold bg-surface focus:outline-none focus:border-text focus:ring-1 focus:ring-text"
-            placeholder="000000"
-            required
-          />
-          
-          <button
-            type="submit"
-            disabled={loading || code.length !== 6}
-            className="w-full bg-text text-white font-semibold py-2.5 rounded-[6px] hover:bg-text/90 transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Verifying...' : 'Verify & Unlock'}
-          </button>
-        </form>
-        
-        <div className="mt-6 flex items-center justify-between text-xs border-t border-border pt-4">
-          <button
-            onClick={handleResend}
-            disabled={resending || cooldown > 0}
-            className="text-accent font-semibold hover:text-accent/80 transition-colors disabled:opacity-50"
-          >
-            {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
-          </button>
-          <button
-            onClick={onClose}
-            className="text-muted hover:text-text hover:underline transition-colors font-semibold"
-          >
-            Cancel
-          </button>
-        </div>
+        {!codeSent ? (
+          <div className="flex flex-col gap-4">
+            <button
+              onClick={handleSendCode}
+              disabled={loading}
+              className="w-full bg-text text-white font-semibold py-2.5 rounded-[6px] hover:bg-text/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {loading ? 'Sending...' : 'Send Verification Code'}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full text-center text-xs text-muted hover:text-text hover:underline transition-colors font-semibold py-2 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <>
+            <form onSubmit={handleVerify} className="flex flex-col gap-4">
+              <input
+                type="text"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                className="w-full border border-border rounded-[6px] py-2.5 text-center font-mono text-xl tracking-[0.5em] font-semibold bg-surface focus:outline-none focus:border-text focus:ring-1 focus:ring-text"
+                placeholder="000000"
+                required
+              />
+              
+              <button
+                type="submit"
+                disabled={loading || code.length !== 6}
+                className="w-full bg-text text-white font-semibold py-2.5 rounded-[6px] hover:bg-text/90 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? 'Verifying...' : 'Verify & Unlock'}
+              </button>
+            </form>
+            
+            <div className="mt-6 flex items-center justify-between text-xs border-t border-border pt-4">
+              <button
+                onClick={handleResend}
+                disabled={resending || cooldown > 0}
+                className="text-accent font-semibold hover:text-accent/80 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
+              </button>
+              <button
+                onClick={onClose}
+                className="text-muted hover:text-text hover:underline transition-colors font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

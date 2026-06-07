@@ -2,18 +2,12 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema(
   {
-    username: {
+    name: {
       type: String,
-      required: [true, 'Username is required.'],
-      unique: true,
+      required: [true, 'Name is required.'],
       trim: true,
-      minlength: [3, 'Username must be at least 3 characters long.'],
-      maxlength: [32, 'Username cannot exceed 32 characters.'],
-      // Only alphanumeric characters and underscores
-      match: [
-        /^[a-zA-Z0-9_]+$/,
-        'Username may only contain letters, numbers, and underscores.',
-      ],
+      minlength: [3, 'Name must be at least 3 characters long.'],
+      maxlength: [32, 'Name cannot exceed 32 characters.'],
     },
     email: {
       type: String,
@@ -45,6 +39,11 @@ const userSchema = new mongoose.Schema(
     emailVerificationExpires: {
       type: Date,
       default: null,
+    },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      default: 'user',
     },
   },
   {

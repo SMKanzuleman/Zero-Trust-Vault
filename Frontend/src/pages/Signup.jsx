@@ -5,7 +5,7 @@
       import toast from 'react-hot-toast';
 
       const Signup = () => {
-        const [username, setUsername] = useState('');
+        const [name, setName] = useState('');
         const [email, setEmail] = useState('');
         const [password, setPassword] = useState('');
         const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,7 +23,7 @@
           }
 
           try {
-            const response = await axios.post('http://localhost:5000/api/auth/signup', { username, email, password });
+            const response = await axios.post('http://localhost:5000/api/auth/signup', { name, email, password });
             localStorage.setItem('token', response.data.token);
             toast.success('Account created successfully!');
             navigate('/verify-email');
@@ -49,15 +49,15 @@
 
               <form onSubmit={handleSignup} className="flex flex-col gap-5">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-text">Username</label>
+                  <label className="text-sm font-semibold text-text">Full Name</label>
                   <div className="relative">
                     <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
                     <input 
                       type="text" 
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                       className="w-full border border-border rounded-[6px] py-2.5 pl-10 pr-3 focus:outline-none focus:border-text focus:ring-1 focus:ring-text transition-all bg-surface"
-                      placeholder="Choose a username"
+                      placeholder="Enter your full name"
                       required
                     />
                   </div>

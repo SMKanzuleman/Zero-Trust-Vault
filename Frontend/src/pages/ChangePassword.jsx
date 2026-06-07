@@ -11,6 +11,13 @@ const ChangePassword = () => {
   const [saving, setSaving] = useState(false);
   
   const token = localStorage.getItem('token');
+  let userRole = 'user';
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      userRole = payload.role || 'user';
+    } catch (e) {}
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,10 +49,10 @@ const ChangePassword = () => {
   return (
     <div className="min-h-screen p-8 flex items-center justify-center relative">
       <Link 
-        to="/dashboard" 
+        to={userRole === 'admin' ? "/admin" : "/vault"} 
         className="absolute top-8 left-8 flex items-center gap-2 text-sm font-semibold text-muted hover:text-text transition-colors"
       >
-        <ArrowLeft size={16} /> Back to Vault
+        <ArrowLeft size={16} /> {userRole === 'admin' ? 'Back to Control Panel' : 'Back to Vault'}
       </Link>
 
       <div className="w-full max-w-[400px]">

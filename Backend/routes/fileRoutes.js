@@ -108,13 +108,13 @@ const safeDelete = (filePath) => {
  */
 router.post('/auth/signup', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { name, email, password } = req.body;
 
     // ── Input Validation ────────────────────────────────────────────────────
-    if (!username || !email || !password) {
+    if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'username, email, and password are required fields.',
+        message: 'name, email, and password are required fields.',
       });
     }
 
@@ -126,14 +126,6 @@ router.post('/auth/signup', async (req, res) => {
     }
 
     // ── Duplicate Check ─────────────────────────────────────────────────────
-    const existingUser = await User.findOne({ username: username.trim() });
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: `Username '${username}' is already taken.`,
-      });
-    }
-
     const existingEmail = await User.findOne({ email: email.trim().toLowerCase() });
     if (existingEmail) {
       return res.status(409).json({
@@ -151,15 +143,16 @@ router.post('/auth/signup', async (req, res) => {
 
     // ── Persist User Document ────────────────────────────────────────────────
     const newUser = await User.create({
-      username: username.trim(),
+      name: name.trim(),
       email: email.trim().toLowerCase(),
       passwordHash,
       isEmailVerified: false,
+      role: 'user',
       emailVerificationCode: verificationCode,
       emailVerificationExpires: verificationExpires,
     });
 
-    console.log(`✅ [Auth] New user registered: ${newUser.username}`);
+    console.log(`✅ [Auth] New user registered: ${newUser.name}`);
 
     // ── Send Verification Email (async) ──────────────────────────────────────
     sendVerificationEmail(newUser.email, verificationCode).catch(err => {
@@ -169,8 +162,9 @@ router.post('/auth/signup', async (req, res) => {
     // ── Issue Signed JWT (Auto Login) ───────────────────────────────────────
     const payload = {
       id:       newUser._id.toString(),
-      username: newUser.username,
+      name:     newUser.name,
       isEmailVerified: false,
+      role:     'user',
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -184,9 +178,10 @@ router.post('/auth/signup', async (req, res) => {
       token,
       user: {
         id:       newUser._id,
-        username: newUser.username,
+        name:     newUser.name,
         email:    newUser.email,
         isEmailVerified: false,
+        role:     'user',
       },
     });
   } catch (err) {
@@ -207,38 +202,39 @@ router.post('/auth/signup', async (req, res) => {
  */
 router.post('/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
 
-    if (!username || !password) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'username and password are required.',
+        message: 'email and password are required.',
       });
     }
 
-    const user = await User.findOne({ username: username.trim() }).lean();
+    const user = await User.findOne({ email: email.trim().toLowerCase() }).lean();
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid username or password.',
+        message: 'Invalid email or password.',
       });
     }
 
     const isMatch = verifyPassword(user.passwordHash, password);
 
     if (!isMatch) {
-      console.warn(`⚠️  [Auth] Failed login attempt for username: ${username}`);
+      console.warn(`⚠️  [Auth] Failed login attempt for email: ${email}`);
       return res.status(401).json({
         success: false,
-        message: 'Invalid username or password.',
+        message: 'Invalid email or password.',
       });
     }
 
     const payload = {
       id:       user._id.toString(),
-      username: user.username,
+      name:     user.name,
       isEmailVerified: user.isEmailVerified,
+      role:     user.role || 'user',
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -246,7 +242,7 @@ router.post('/auth/login', async (req, res) => {
       algorithm: 'HS256',
     });
 
-    console.log(`✅ [Auth] User logged in: ${user.username}`);
+    console.log(`✅ [Auth] User logged in: ${user.name}`);
 
     return res.status(200).json({
       success: true,
@@ -254,9 +250,10 @@ router.post('/auth/login', async (req, res) => {
       token,
       user: {
         id:       user._id,
-        username: user.username,
+        name:     user.name,
         email:    user.email,
         isEmailVerified: user.isEmailVerified,
+        role:     user.role || 'user',
       },
     });
   } catch (err) {
@@ -333,13 +330,14 @@ router.post('/auth/verify-email', authenticateJWT, async (req, res) => {
     user.emailVerificationExpires = null;
     await user.save();
 
-    console.log(`✅ [Auth] Email verified for user: ${user.username}`);
+    console.log(`✅ [Auth] Email verified for user: ${user.name}`);
 
     // Generate new JWT reflecting updated verified status
     const payload = {
       id:       user._id.toString(),
-      username: user.username,
+      name:     user.name,
       isEmailVerified: true,
+      role:     user.role || 'user',
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -353,9 +351,10 @@ router.post('/auth/verify-email', authenticateJWT, async (req, res) => {
       token,
       user: {
         id:       user._id,
-        username: user.username,
+        name:     user.name,
         email:    user.email,
         isEmailVerified: true,
+        role:     user.role || 'user',
       }
     });
   } catch (err) {
@@ -380,7 +379,7 @@ router.get('/auth/profile', authenticateJWT, async (req, res) => {
     return res.status(200).json({
       success: true,
       user: {
-        username: user.username,
+        name: user.name,
         email: user.email,
         profilePicture: user.profilePicture,
         isEmailVerified: user.isEmailVerified
@@ -393,31 +392,28 @@ router.get('/auth/profile', authenticateJWT, async (req, res) => {
 
 /**
  * PUT /api/auth/profile
- * Updates the user's username and profile picture. Returns a new JWT if username changes.
+ * Updates the user's name and profile picture. Returns a new JWT if name changes.
  */
 router.put('/auth/profile', authenticateJWT, async (req, res) => {
   try {
-    const { username, profilePicture } = req.body;
-    if (!username) {
-      return res.status(400).json({ success: false, message: 'Username is required.' });
+    const { name, profilePicture } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Name is required.' });
     }
 
-    const trimmedUsername = username.trim();
-
-    // Check for duplicates
-    const existingUser = await User.findOne({
-      username: trimmedUsername,
-      _id: { $ne: req.user.id }
-    });
-
-    if (existingUser) {
-      return res.status(409).json({ success: false, message: 'Username is already taken.' });
-    }
+    const trimmedName = name.trim();
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
-    user.username = trimmedUsername;
+    if (user.role === 'admin') {
+      if (trimmedName !== user.name) {
+        return res.status(400).json({ success: false, message: 'Administrators are not permitted to change their name.' });
+      }
+    } else {
+      user.name = trimmedName;
+    }
+
     if (profilePicture !== undefined) {
       // Validate roughly that it's a base64 image (or empty string)
       user.profilePicture = profilePicture;
@@ -425,11 +421,12 @@ router.put('/auth/profile', authenticateJWT, async (req, res) => {
     
     await user.save();
 
-    // Issue new token since username is in payload
+    // Issue new token since name is in payload
     const payload = {
       id: user._id.toString(),
-      username: user.username,
+      name: user.name,
       isEmailVerified: user.isEmailVerified,
+      role: user.role || 'user',
     };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES_IN || '8h',
@@ -442,10 +439,11 @@ router.put('/auth/profile', authenticateJWT, async (req, res) => {
       token,
       user: {
         id: user._id,
-        username: user.username,
+        name: user.name,
         email: user.email,
         profilePicture: user.profilePicture,
-        isEmailVerified: user.isEmailVerified
+        isEmailVerified: user.isEmailVerified,
+        role: user.role || 'user',
       }
     });
   } catch (err) {
@@ -590,6 +588,7 @@ router.post(
         file: {
           id:           secureFile._id,
           fileName:     secureFile.fileName,
+          fileSize:     secureFile.fileSize,
           uploadedAt:   secureFile.uploadedAt,
         },
       });
@@ -621,7 +620,7 @@ router.get('/files/', authenticateJWT, async (req, res) => {
 
     // Fetch files (excluding both fileData and backupData to save RAM)
     const dbFiles = await SecureFile.find({ uploadedBy: req.user.id })
-      .populate('uploadedBy', 'username') // Populate uploader info
+      .populate('uploadedBy', 'name') // Populate uploader info
       .select('-backupData -fileData')    // Never expose or load the massive buffers for listing
       .sort({ uploadedAt: -1 });
 
@@ -869,6 +868,140 @@ router.post('/files/recover/:id', authenticateJWT, requireEmailVerified, async (
   } catch (err) {
     console.error(`❌ [Recover] Error: ${err.message}`);
     return res.status(500).json({ success: false, message: `Recovery failed: ${err.message}` });
+  }
+});
+
+// ─── ADMIN ROUTES (Admin Role Protected) ─────────────────────────────────────
+
+/**
+ * GET /api/admin/stats
+ * Retrieves user listing and overall database storage stats for administrators.
+ */
+router.get('/admin/stats', authenticateJWT, async (req, res) => {
+  try {
+    // Assert admin role
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Administrator privileges required.'
+      });
+    }
+
+    // Run aggregation to calculate files count and space consumption for each user
+    const stats = await User.aggregate([
+      {
+        $match: { role: { $ne: 'admin' } }
+      },
+      {
+        $lookup: {
+          from: 'securefiles',
+          localField: '_id',
+          foreignField: 'uploadedBy',
+          as: 'files'
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          email: 1,
+          isEmailVerified: 1,
+          role: 1,
+          createdAt: 1,
+          totalUsedBytes: { $sum: '$files.fileSize' },
+          filesCount: { $size: '$files' }
+        }
+      },
+      { $sort: { createdAt: -1 } }
+    ]);
+
+    // Calculate total summary stats
+    const totalUsers = stats.length;
+    let totalStorageBytes = 0;
+    let verifiedUsers = 0;
+    stats.forEach(u => {
+      totalStorageBytes += u.totalUsedBytes;
+      if (u.isEmailVerified) {
+        verifiedUsers++;
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      summary: {
+        totalUsers,
+        totalStorageBytes,
+        verifiedUsers
+      },
+      users: stats
+    });
+  } catch (err) {
+    console.error(`❌ [AdminStats] Error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve administrator statistics.'
+    });
+  }
+});
+
+/**
+ * DELETE /api/admin/users/:id
+ * Deletes a user and cascades file and backup deletions.
+ */
+router.delete('/admin/users/:id', authenticateJWT, async (req, res) => {
+  try {
+    // Assert admin role
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Administrator privileges required.'
+      });
+    }
+
+    const targetUserId = req.params.id;
+
+    // Prevent admin from deleting themselves
+    if (targetUserId === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own administrator account.'
+      });
+    }
+
+    const userToDelete = await User.findById(targetUserId);
+    if (!userToDelete) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.'
+      });
+    }
+
+    // Find all files uploaded by this user
+    const userFiles = await SecureFile.find({ uploadedBy: targetUserId });
+    const fileIds = userFiles.map(f => f._id);
+
+    // Delete backups for these files
+    if (fileIds.length > 0) {
+      await BackupFile.deleteMany({ secureFileId: { $in: fileIds } });
+    }
+
+    // Delete secure files
+    await SecureFile.deleteMany({ uploadedBy: targetUserId });
+
+    // Delete user
+    await User.findByIdAndDelete(targetUserId);
+
+    console.log(`🗑️  [Admin] Deleted user: ${userToDelete.name} (${userToDelete.email})`);
+
+    return res.status(200).json({
+      success: true,
+      message: `User ${userToDelete.name} and all associated files deleted successfully.`
+    });
+  } catch (err) {
+    console.error(`❌ [AdminDeleteUser] Error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete user.'
+    });
   }
 });
 

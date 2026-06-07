@@ -185,15 +185,81 @@ process.on('unhandledRejection', (reason) => {
   console.error('❌ [Server] Unhandled Promise Rejection:', reason);
 });
 
+const seedAdminUser = async () => {
+  try {
+    const User = require('./models/User');
+    const { hashPassword } = require('./controllers/cryptoController');
+    
+    // Drop the unique username_1 index if it exists in the collection to avoid duplicate key errors
+    try {
+      await User.collection.dropIndex('username_1');
+      console.log('✅ [Server/Migration] Dropped unique username index.');
+    } catch (e) {
+      // Index might not exist, which is fine
+    }
+
+    // Migrate any legacy users who only have 'username' and no 'name'
+    const unmigratedUsers = await User.find({ name: { $exists: false } });
+    if (unmigratedUsers.length > 0) {
+      console.log(`🌱 [Server/Migration] Migrating ${unmigratedUsers.length} users (username -> name)...`);
+      for (const u of unmigratedUsers) {
+        const legacyUsername = u.get('username') || 'Legacy User';
+        u.name = legacyUsername;
+        await u.save();
+      }
+      console.log('✅ [Server/Migration] Migration completed successfully.');
+    }
+
+    const adminExists = await User.findOne({
+      email: 'admin@zerotrustvault.com'
+    });
+
+    if (!adminExists) {
+      console.log('🌱 [Server] Seeding default administrator account...');
+      const adminPasswordHash = hashPassword('AdminSecureVault2026!');
+      await User.create({
+        name: 'Admin',
+        email: 'admin@zerotrustvault.com',
+        passwordHash: adminPasswordHash,
+        role: 'admin',
+        isEmailVerified: true
+      });
+      console.log('✅ [Server] Default administrator account seeded successfully.');
+    } else {
+      let needsSave = false;
+      if (!adminExists.name) {
+        adminExists.name = 'Admin';
+        needsSave = true;
+      }
+      if (adminExists.role !== 'admin') {
+        adminExists.role = 'admin';
+        needsSave = true;
+      }
+      if (needsSave) {
+        await adminExists.save();
+        console.log('✅ [Server] Administrator account fields migrated/updated.');
+      } else {
+        console.log('ℹ️ [Server] Administrator account already seeded.');
+      }
+    }
+  } catch (err) {
+    console.error('❌ [Server] Failed to seed administrator account / migrate:', err.message);
+  }
+};
+
 // ─── STARTUP ──────────────────────────────────────────────────────────────────
 /**
  * Bootstraps the server:
  *   1. Connects to MongoDB
- *   2. Starts HTTP listener
+ *   2. Seeds default admin user
+ *   3. Starts HTTP listener
  */
 const bootstrap = async () => {
   // Connect to MongoDB before accepting traffic
   await connectDB();
+
+  // Seed default admin account
+  await seedAdminUser();
 
   const server = app.listen(PORT, () => {
     console.log('\n╔══════════════════════════════════════════════╗');
