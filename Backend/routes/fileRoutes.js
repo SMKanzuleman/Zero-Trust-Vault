@@ -18,6 +18,28 @@ const {
 const User       = require('../models/User');
 const SecureFile = require('../models/SecureFile');
 const BackupFile = require('../models/BackupFile');
+const { sendVerificationEmail } = require('../config/mailer');
+
+// ─── EMAIL VERIFICATION MIDDLEWARE ──────────────────────────────────────────
+const requireEmailVerified = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        success: false,
+        isEmailVerified: false,
+        message: 'Email verification is required to perform this action.'
+      });
+    }
+    next();
+  } catch (err) {
+    console.error(`❌ [Auth Middleware] Verification check error: ${err.message}`);
+    return res.status(500).json({ success: false, message: 'Server verification check error.' });
+  }
+};
 
 // ─── DIRECTORY SETUP ─────────────────────────────────────────────────────────
 // Define storage directories relative to the project root.
@@ -82,9 +104,7 @@ const safeDelete = (filePath) => {
  * ──────────────────────────────────────────────────────────────────────────────
  * Registers a new user. Hashes the password via scrypt (OpenSSL-backed),
  * stores the 'salt:hash' credential in MongoDB.
- *
- * Body: { username: string, password: string }
- * Response 201: { success: true, message, user: { id, username } }
+ * Generates an OTP verification code and logs in the user automatically.
  */
 router.post('/auth/signup', async (req, res) => {
   try {
@@ -122,30 +142,54 @@ router.post('/auth/signup', async (req, res) => {
       });
     }
 
-    // ── Password Hashing (scrypt via OpenSSL binding) ────────────────────
-    // hashPassword() internally calls crypto.scryptSync(), which delegates
-    // to the host system's OpenSSL scrypt implementation.
+    // ── Password Hashing ─────────────────────────────────────────────────────
     const passwordHash = hashPassword(password);
+
+    // ── Generate Verification Code ──────────────────────────────────────────
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
 
     // ── Persist User Document ────────────────────────────────────────────────
     const newUser = await User.create({
       username: username.trim(),
       email: email.trim().toLowerCase(),
       passwordHash,
+      isEmailVerified: false,
+      emailVerificationCode: verificationCode,
+      emailVerificationExpires: verificationExpires,
     });
 
     console.log(`✅ [Auth] New user registered: ${newUser.username}`);
 
+    // ── Send Verification Email (async) ──────────────────────────────────────
+    sendVerificationEmail(newUser.email, verificationCode).catch(err => {
+      console.error(`⚠️ [Auth] Failed to send verification email on signup: ${err.message}`);
+    });
+
+    // ── Issue Signed JWT (Auto Login) ───────────────────────────────────────
+    const payload = {
+      id:       newUser._id.toString(),
+      username: newUser.username,
+      isEmailVerified: false,
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
+      algorithm: 'HS256',
+    });
+
     return res.status(201).json({
       success: true,
-      message: 'User registered successfully.',
+      message: 'User registered successfully. Verification email sent.',
+      token,
       user: {
         id:       newUser._id,
         username: newUser.username,
+        email:    newUser.email,
+        isEmailVerified: false,
       },
     });
   } catch (err) {
-    // Handle Mongoose validation errors cleanly
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((e) => e.message);
       return res.status(400).json({ success: false, message: messages.join(' ') });
@@ -160,14 +204,6 @@ router.post('/auth/signup', async (req, res) => {
  * ──────────────────────────────────────────────────────────────────────────────
  * Authenticates a user. Verifies the password using constant-time scrypt
  * comparison, then issues a signed JWT containing the user's profile.
- *
- * Body: { username: string, password: string }
- * Response 200: { success: true, token, user: { id, username } }
- *
- * JWT PAYLOAD:
- *   { id, username, iat, exp }
- *   Signed with: HMAC-SHA256 (HS256), secret from process.env.JWT_SECRET
- *   Expires in:  process.env.JWT_EXPIRES_IN (default: '8h')
  */
 router.post('/auth/login', async (req, res) => {
   try {
@@ -180,22 +216,15 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    // ── Fetch User (include passwordHash — excluded from toJSON()) ─────────
-    // We use `.select('+passwordHash')` pattern via a raw query since
-    // the field is in the schema. We retrieve the raw document.
     const user = await User.findOne({ username: username.trim() }).lean();
 
     if (!user) {
-      // Use a generic message to avoid username enumeration attacks
       return res.status(401).json({
         success: false,
         message: 'Invalid username or password.',
       });
     }
 
-    // ── Credential Verification (constant-time scrypt compare) ─────────────
-    // verifyPassword() re-derives the scrypt hash with the stored salt and
-    // compares using crypto.timingSafeEqual() — immune to timing attacks.
     const isMatch = verifyPassword(user.passwordHash, password);
 
     if (!isMatch) {
@@ -206,11 +235,10 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    // ── Issue Signed JWT ─────────────────────────────────────────────────────
-    // Payload carries identity.
     const payload = {
       id:       user._id.toString(),
       username: user.username,
+      isEmailVerified: user.isEmailVerified,
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -227,11 +255,112 @@ router.post('/auth/login', async (req, res) => {
       user: {
         id:       user._id,
         username: user.username,
+        email:    user.email,
+        isEmailVerified: user.isEmailVerified,
       },
     });
   } catch (err) {
     console.error(`❌ [Auth] Login error: ${err.message}`);
     return res.status(500).json({ success: false, message: 'Internal server error during login.' });
+  }
+});
+
+/**
+ * POST /api/auth/send-verification
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Generates and sends a new verification code to the authenticated user.
+ */
+router.post('/auth/send-verification', authenticateJWT, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified.' });
+    }
+
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpires = Date.now() + 15 * 60 * 1000; // 15 mins
+    await user.save();
+
+    await sendVerificationEmail(user.email, verificationCode);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Verification code sent successfully.'
+    });
+  } catch (err) {
+    console.error(`❌ [Auth] Send verification error: ${err.message}`);
+    return res.status(500).json({ success: false, message: 'Failed to send verification code.' });
+  }
+});
+
+/**
+ * POST /api/auth/verify-email
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Verifies the user's email verification code and returns a new JWT reflecting the verified state.
+ */
+router.post('/auth/verify-email', authenticateJWT, async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Verification code is required.' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified.' });
+    }
+
+    if (!user.emailVerificationCode || user.emailVerificationCode !== code.trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid verification code.' });
+    }
+
+    if (new Date() > user.emailVerificationExpires) {
+      return res.status(400).json({ success: false, message: 'Verification code has expired.' });
+    }
+
+    // Mark verified and clear codes
+    user.isEmailVerified = true;
+    user.emailVerificationCode = null;
+    user.emailVerificationExpires = null;
+    await user.save();
+
+    console.log(`✅ [Auth] Email verified for user: ${user.username}`);
+
+    // Generate new JWT reflecting updated verified status
+    const payload = {
+      id:       user._id.toString(),
+      username: user.username,
+      isEmailVerified: true,
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
+      algorithm: 'HS256',
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email verified successfully!',
+      token,
+      user: {
+        id:       user._id,
+        username: user.username,
+        email:    user.email,
+        isEmailVerified: true,
+      }
+    });
+  } catch (err) {
+    console.error(`❌ [Auth] Email verification error: ${err.message}`);
+    return res.status(500).json({ success: false, message: 'Email verification failed.' });
   }
 });
 
@@ -248,7 +377,15 @@ router.get('/auth/profile', authenticateJWT, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
     
-    return res.status(200).json({ success: true, user: { username: user.username, profilePicture: user.profilePicture } });
+    return res.status(200).json({
+      success: true,
+      user: {
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        isEmailVerified: user.isEmailVerified
+      }
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Internal server error.' });
   }
@@ -292,6 +429,7 @@ router.put('/auth/profile', authenticateJWT, async (req, res) => {
     const payload = {
       id: user._id.toString(),
       username: user.username,
+      isEmailVerified: user.isEmailVerified,
     };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES_IN || '8h',
@@ -302,7 +440,13 @@ router.put('/auth/profile', authenticateJWT, async (req, res) => {
       success: true,
       message: 'Profile updated successfully.',
       token,
-      user: { id: user._id, username: user.username, profilePicture: user.profilePicture }
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        isEmailVerified: user.isEmailVerified
+      }
     });
   } catch (err) {
     console.error(`❌ [Auth] Profile update error: ${err.message}`);
@@ -365,6 +509,7 @@ router.put('/auth/password', authenticateJWT, async (req, res) => {
 router.post(
   '/files/upload',
   authenticateJWT,
+  requireEmailVerified,
   upload.single('file'),
   async (req, res) => {
     // Track temp file path for cleanup in all error branches
@@ -521,7 +666,7 @@ router.get('/files/', authenticateJWT, async (req, res) => {
  *
  * Response: Streamed binary file (application/octet-stream) | JSON error
  */
-router.get('/files/download/:id', authenticateJWT, async (req, res) => {
+router.get('/files/download/:id', authenticateJWT, requireEmailVerified, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -592,7 +737,7 @@ const getMimeType = (filename) => {
  * GET /api/files/view/:id
  * Streams the decrypted file to the browser with inline content disposition.
  */
-router.get('/files/view/:id', authenticateJWT, async (req, res) => {
+router.get('/files/view/:id', authenticateJWT, requireEmailVerified, async (req, res) => {
   try {
     const { id } = req.params;
     const secureFile = await SecureFile.findById(id);
@@ -628,7 +773,7 @@ router.get('/files/view/:id', authenticateJWT, async (req, res) => {
  * DELETE /api/files/:id
  * Removes a file from the vault.
  */
-router.delete('/files/:id', authenticateJWT, async (req, res) => {
+router.delete('/files/:id', authenticateJWT, requireEmailVerified, async (req, res) => {
   try {
     const fileId = req.params.id;
 
@@ -656,7 +801,7 @@ router.delete('/files/:id', authenticateJWT, async (req, res) => {
  * GET /api/files/verify/:id
  * Hashes the MongoDB fileData buffer via OpenSSL and compares to the original DB hash.
  */
-router.get('/files/verify/:id', authenticateJWT, async (req, res) => {
+router.get('/files/verify/:id', authenticateJWT, requireEmailVerified, async (req, res) => {
   let tempFilePath = null;
   try {
     const { id } = req.params;
@@ -699,7 +844,7 @@ router.get('/files/verify/:id', authenticateJWT, async (req, res) => {
  * POST /api/files/recover/:id
  * Restores the working fileData buffer from the pristine backupData buffer.
  */
-router.post('/files/recover/:id', authenticateJWT, async (req, res) => {
+router.post('/files/recover/:id', authenticateJWT, requireEmailVerified, async (req, res) => {
   try {
     const fileId = req.params.id;
 

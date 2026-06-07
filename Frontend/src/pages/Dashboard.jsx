@@ -47,6 +47,7 @@ const Dashboard = () => {
   const [activeCategory, setActiveCategory] = useState('All');
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   const token = localStorage.getItem('token');
 
@@ -99,7 +100,19 @@ const Dashboard = () => {
     navigate('/login');
   };
 
+  const checkVerification = () => {
+    if (profile && !profile.isEmailVerified) {
+      setShowVerificationModal(true);
+      return false;
+    }
+    return true;
+  };
+
   const handleFileUpload = async (e) => {
+    if (!checkVerification()) {
+      e.target.value = null;
+      return;
+    }
     const file = e.target.files[0];
     if (!file) return;
 
@@ -146,6 +159,7 @@ const Dashboard = () => {
   };
 
   const handleDownload = async (fileId, fileName) => {
+    if (!checkVerification()) return;
     // ── Pre-flight Verification ──────────────────────────────────────────────
     setVerifyingFiles(prev => ({ ...prev, [fileId]: 'download' }));
     const toastId = toast.loading('Verifying file integrity...');
@@ -206,6 +220,7 @@ const Dashboard = () => {
   };
 
   const handleView = async (fileId) => {
+    if (!checkVerification()) return;
     // ── Pre-flight Verification ──────────────────────────────────────────────
     setVerifyingFiles(prev => ({ ...prev, [fileId]: 'view' }));
     const toastId = toast.loading('Verifying file integrity...');
@@ -234,6 +249,7 @@ const Dashboard = () => {
   };
 
   const handleRecover = async (fileId) => {
+    if (!checkVerification()) return;
     const toastId = toast.loading('Recovering file from secure backup...');
     try {
       await axios.post(`http://localhost:5000/api/files/recover/${fileId}`, {}, {
@@ -248,6 +264,7 @@ const Dashboard = () => {
 
 
   const handleDelete = async (fileId) => {
+    if (!checkVerification()) return;
     if (!window.confirm('Are you sure you want to delete this file? This action cannot be undone.')) return;
     
     try {
@@ -294,6 +311,20 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen p-8 max-w-[1000px] mx-auto">
+      {profile && !profile.isEmailVerified && (
+        <div className="bg-red-500/10 border border-red-500/30 text-red-600 rounded-lg p-3.5 mb-6 text-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Lock size={16} className="shrink-0" />
+            <span><strong>Email Verification Required:</strong> Your file actions are currently locked.</span>
+          </div>
+          <button 
+            onClick={() => setShowVerificationModal(true)} 
+            className="text-xs bg-red-600 text-white font-bold py-1.5 px-3 rounded hover:bg-red-700 transition-colors shrink-0 shadow-sm"
+          >
+            Verify Email
+          </button>
+        </div>
+      )}
       <header className="flex justify-between items-center mb-12 pb-6 border-b border-border">
         <h1 
           className="text-2xl font-black tracking-widest text-accent cursor-pointer hover:opacity-80 transition-opacity" 
@@ -505,6 +536,128 @@ const Dashboard = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {showVerificationModal && (
+        <VerificationModal 
+          onClose={() => setShowVerificationModal(false)} 
+          onVerifySuccess={() => {
+            setProfile(prev => ({ ...prev, isEmailVerified: true }));
+            setShowVerificationModal(false);
+          }}
+          token={token}
+          email={profile?.email}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── EMAIL VERIFICATION INLINE MODAL ─────────────────────────────────────────
+const VerificationModal = ({ onClose, onVerifySuccess, token, email }) => {
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown === 0) return;
+    const interval = setInterval(() => {
+      setCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldown]);
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    if (code.trim().length !== 6) {
+      toast.error('Please enter a 6-digit code');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        'http://localhost:5000/api/auth/verify-email',
+        { code: code.trim() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      localStorage.setItem('token', res.data.token); // Update verified JWT
+      toast.success('Email verified successfully!');
+      onVerifySuccess();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (cooldown > 0) return;
+    
+    setResending(true);
+    try {
+      await axios.post(
+        'http://localhost:5000/api/auth/send-verification',
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('New verification code sent!');
+      setCooldown(30);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to resend code');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[999]">
+      <div className="bg-surface border border-border w-full max-w-[400px] rounded-[10px] p-6 shadow-2xl animate-[scaleUp_0.2s_ease-out]">
+        <div className="text-center mb-6">
+          <h3 className="text-xl font-bold mb-1">Verification Required</h3>
+          <p className="text-sm text-muted">
+            To unlock file actions, please confirm the code sent to:
+            <br />
+            <span className="font-semibold text-text">{email || 'your email'}</span>
+          </p>
+        </div>
+        
+        <form onSubmit={handleVerify} className="flex flex-col gap-4">
+          <input
+            type="text"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            className="w-full border border-border rounded-[6px] py-2.5 text-center font-mono text-xl tracking-[0.5em] font-semibold bg-surface focus:outline-none focus:border-text focus:ring-1 focus:ring-text"
+            placeholder="000000"
+            required
+          />
+          
+          <button
+            type="submit"
+            disabled={loading || code.length !== 6}
+            className="w-full bg-text text-white font-semibold py-2.5 rounded-[6px] hover:bg-text/90 transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Verifying...' : 'Verify & Unlock'}
+          </button>
+        </form>
+        
+        <div className="mt-6 flex items-center justify-between text-xs border-t border-border pt-4">
+          <button
+            onClick={handleResend}
+            disabled={resending || cooldown > 0}
+            className="text-accent font-semibold hover:text-accent/80 transition-colors disabled:opacity-50"
+          >
+            {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-muted hover:text-text hover:underline transition-colors font-semibold"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

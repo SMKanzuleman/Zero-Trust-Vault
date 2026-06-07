@@ -23,9 +23,10 @@
           }
 
           try {
-            await axios.post('http://localhost:5000/api/auth/signup', { username, email, password });
+            const response = await axios.post('http://localhost:5000/api/auth/signup', { username, email, password });
+            localStorage.setItem('token', response.data.token);
             toast.success('Account created successfully!');
-            navigate('/login');
+            navigate('/verify-email');
           } catch (err) {
             toast.error(err.response?.data?.message || 'Failed to create account');
           } finally {

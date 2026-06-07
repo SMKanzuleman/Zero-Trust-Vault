@@ -62,8 +62,8 @@ const Hero = () => {
         Secure File Encryption System
       </div>
       
-      <h1 className="text-[2.4rem] md:text-[3.6rem] leading-[1.1] tracking-[-2px] max-w-[900px] mx-auto font-bold">
-        Store Files Without Trusting Storage
+      <h1 className="text-[3rem] md:text-[3.6rem] leading-[1.1] tracking-[-2px] max-w-[1000px] mx-auto font-bold">
+        Because Trust is a Vulnerability.
       </h1>
       
       <p className="max-w-[650px] mx-auto mt-[20px] text-muted text-[1.05rem] leading-relaxed">
