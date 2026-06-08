@@ -1,6 +1,6 @@
 /**
  * @file server.js
- * @description Main entry point for the Zero-Trust Vault backend server.
+ * @description Main entry point for the CipherNest backend server.
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  * STARTUP SEQUENCE
@@ -19,7 +19,7 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  *   PORT                  → TCP port for the HTTP server (default: 5000)
- *   MONGO_URI             → MongoDB connection string (e.g. mongodb://localhost:27017/zerotrust)
+ *   MONGO_URI             → MongoDB connection string (e.g. mongodb://localhost:27017/ciphernest)
  *   JWT_SECRET            → Long random string for HMAC-SHA256 JWT signing
  *   JWT_EXPIRES_IN        → JWT lifespan (e.g. '8h', '1d') — default: '8h'
  *   FILE_ENCRYPTION_KEY   → Passphrase for OpenSSL AES-256-CBC file encryption
@@ -127,7 +127,7 @@ app.get('/health', (_req, res) => {
   res.status(200).json({
     status:    'ok',
     timestamp: new Date().toISOString(),
-    service:   'Zero-Trust Vault API',
+    service:   'CipherNest API',
     version:   process.env.npm_package_version || '1.0.0',
   });
 });
@@ -211,7 +211,7 @@ const seedAdminUser = async () => {
     }
 
     const adminExists = await User.findOne({
-      email: 'admin@zerotrustvault.com'
+      email: 'admin@ciphernest.com'
     });
 
     if (!adminExists) {
@@ -219,7 +219,7 @@ const seedAdminUser = async () => {
       const adminPasswordHash = hashPassword('AdminSecureVault2026!');
       await User.create({
         name: 'Admin',
-        email: 'admin@zerotrustvault.com',
+        email: 'admin@ciphernest.com',
         passwordHash: adminPasswordHash,
         role: 'admin',
         isEmailVerified: true
@@ -263,7 +263,7 @@ const bootstrap = async () => {
 
   const server = app.listen(PORT, () => {
     console.log('\n╔══════════════════════════════════════════════╗');
-    console.log('║      🔒  ZERO-TRUST VAULT API ONLINE  🔒      ║');
+    console.log('║         🔒  CIPHERNEST API ONLINE  🔒         ║');
     console.log('╚══════════════════════════════════════════════╝');
     console.log(`   ➜  Listening on   : http://localhost:${PORT}`);
     console.log(`   ➜  Environment    : ${process.env.NODE_ENV || 'development'}`);

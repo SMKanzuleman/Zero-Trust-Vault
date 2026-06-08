@@ -9,7 +9,7 @@ const Footer = () => {
         <div className="flex items-center gap-2">
           <Shield className="text-accent" size={24} />
           <span className="font-bold text-lg tracking-tight" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-            ZERO-TRUST VAULT
+            CIPHERNEST
           </span>
         </div>
         
@@ -21,7 +21,7 @@ const Footer = () => {
         </div>
         
         <div className="text-sm text-muted">
-          &copy; {new Date().getFullYear()} Zero-Trust Vault. All rights reserved.
+          &copy; {new Date().getFullYear()} CipherNest. All rights reserved.
         </div>
       </div>
     </footer>

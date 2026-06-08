@@ -332,7 +332,7 @@ const Dashboard = () => {
           style={{ fontFamily: "'Orbitron', sans-serif" }}
           onClick={() => navigate('/')}
         >
-          ZERO TRUST VAULT
+          CIPHERNEST
         </h1>
         
         <div className="relative" ref={dropdownRef}>

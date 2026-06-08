@@ -129,7 +129,7 @@ const AdminDashboard = () => {
               style={{ fontFamily: "'Orbitron', sans-serif" }}
               onClick={() => navigate('/')}
             >
-              ZERO TRUST VAULT
+              CIPHERNEST
             </h1>
             <span className="text-[10px] uppercase font-bold tracking-widest text-muted block -mt-1">
               Admin Control Panel

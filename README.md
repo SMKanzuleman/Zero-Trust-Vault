@@ -1,10 +1,10 @@
-# Zero-Trust Vault
+# CipherNest
 
 A highly secure, end-to-end encrypted file storage ecosystem designed with a "zero-trust" philosophy. Built by security-focused engineers, this application ensures that your data remains yours alone, leveraging enterprise-grade cryptography.
 
 ## Overview
 
-Zero-Trust Vault is a modern web application that allows users to securely store and retrieve files. Instead of relying on traditional storage methods where the server implicitly trusts its administrators, this application cryptographically protects data both in transit and at rest. It demonstrates core information security principles, making it virtually impossible for unauthorized entities—including database administrators—to read or maliciously modify user data without detection.
+CipherNest is a modern web application that allows users to securely store and retrieve files. Instead of relying on traditional storage methods where the server implicitly trusts its administrators, this application cryptographically protects data both in transit and at rest. It demonstrates core information security principles, making it virtually impossible for unauthorized entities—including database administrators—to read or maliciously modify user data without detection.
 
 ## Core Security Features
 
